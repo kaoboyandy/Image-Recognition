@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr 19 14:22:11 2018
+
+@author: andy
+"""
+import os
+from keras.applications.vgg16 import VGG16
+from keras.preprocessing import image
+from keras.applications.vgg16 import preprocess_input
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense, Flatten, GlobalAveragePooling2D
+
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten
+from keras.layers import Conv2D, MaxPooling2D
+from keras.optimizers import SGD
+
+from keras import backend as K
+K.tensorflow_backend._get_available_gpus()
+
+
+path = '../data/cat_dog_test_set'
+
+os.getcwd()
+os.chdir(path)
+
+
+VGG16_model = VGG16(include_top= False, weights = 'imagenet', input_shape = (150,150,3))
+#conv_base = VGG16(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
+
+VGG16_model.summary()
+
+from keras.preprocessing.image import ImageDataGenerator
+
+datagen = ImageDataGenerator(rescale=1./255)
+#datagen = ImageDataGenerator(rescale=1./255)
+
+
+x = datagen.flow_from_directory(path, 
+                            target_size = (150,150), 
+                            batch_size = 1000,
+                            class_mode = 'binary')
+
+# To check what x contains 
+# gg = x.next()
+# x contains 2 components: (sample size, 150,150,3) and the labels of (1000,) 
+
+
+def extract_features(directory, sample_count):
+    features = np.zeros(shape=(sample_count, 4,4,512))
+    labels = np.zeros(shape = (sample_count))
+    
+    
+    x = datagen.flow_from_directory(
+            directory, 
+            target_size = (150,150), 
+            batch_size = batch_size,
+            class_mode = 'binary')
+    i = 0
+    for sample_batch, labels_batch in x:
+        pred = VGG16_model.predict(sample_batch)
+        features[i * batch_size : (i + 1) * batch_size] = pred
+        labels[i * batch_size : (i + 1) * batch_size] = labels_batch
+        i += 1
+        if i * batch_size >= sample_count:
+            break
+    return features, labels
+
+batch_size = 100
+n_sample = 1000
+
+features, labels = extract_features(path, n_sample)
+
+features = features.reshape(n_sample, 4*4*512)
+
+####### Neural Network####
+model = Sequential()
+model.add(Dense(128, activation = 'relu',input_dim = 4 * 4 * 512))
+model.add(Dense(1, activation= 'sigmoid')) #or softmax
+model.compile(optimizer= 'Adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+
+epochs = 25
+
+history = model.fit(features, labels, epochs = epochs, validation_split = 0.2)
+
+#model.predict(x_test)
+
+###### Plotting Losses ####
+import matplotlib.pyplot as plt
+plt.style.use('ggplot')
+
+epochs_range = range(0,epochs)
+
+history.history.keys()  # checking keys
+
+acc = history.history['acc']
+val_acc = history.history['val_acc']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+fig, axes = plt.subplots(1,2)
+
+axes[0].plot(epochs_range, acc, 'bo', label='Training acc')
+axes[0].plot(epochs_range, val_acc, 'b', label='Validation acc')
+axes[0].set_title('Training and validation accuracy')
+axes[0].legend()
+
+
+axes[1].plot(epochs_range, loss, 'bo', label='Training loss')
+axes[1].plot(epochs_range, val_loss, 'b', label='Validation loss')
+axes[1].set_title('Training and validation loss')
+axes[1].legend()
